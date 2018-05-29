@@ -1,10 +1,9 @@
 #!/bin/bash
 ###
-## Faraday Penetration Test IDE - Community Version
+## Faraday Penetration Test IDE
 ## Copyright (C) 2013  Infobyte LLC (http://www.infobytesec.com/)
 ## See the file 'doc/LICENSE' for the license information
 ###
-
 
 #Check if is it root
 if [ $EUID -ne 0 ]; then
@@ -12,20 +11,16 @@ if [ $EUID -ne 0 ]; then
  exit 1
 fi
 
-#protection
-sha_kali_i686=f071539d8d64ad9b30c7214daf5b890a94b0e6d68f13bdcc34c2453c99afe9c4
-sha_kali_x86_64=02a050372fb30ede1454e1dd99d97e0fe0963ce2bd36c45efe90eec78df11d04
-sha_ubuntu13_10_i686=8199904fb5fca8bc244c31b596c3ae0d441483bfbb2dc47f66186ceffbf3586e
-sha_ubuntu13_10_x86_64=2b1af6f8d7463324f6df103455748e53cdb1edf6ee796056cdf2f701ccaef031
-sha_ubuntu13_04_i686=d3632a393aa0bf869653afe252248de62e528c4e42ab49a0d16850ab89fda13e
-sha_ubuntu13_04_x86_64=ea3010b8c3f81229a6b79c8d679005c1d482548223ebc448963d2d29aabe5692
+update=0
 
 #os detection
 arch=$(uname -m)
 kernel=$(uname -r)
 if [ -f /etc/lsb-release ]; then
 	if [ ! -f /usr/bin/lsb_release ] ; then
-		apt-get -y install lsb-release
+           apt-get update
+           update=1
+	       apt-get -y install lsb-release
         fi
         os=$(lsb_release -s -d)
 elif [ -f /etc/debian_version ]; then
@@ -37,59 +32,35 @@ else
 fi
 
 echo "[+] Install $os $arch"
-down=0
-if [ "$os" = "Ubuntu 10.04.2 LTS" ]; then
-    version="ubuntu10-04.02$arch"
-elif [ "$os" = "Debian Kali Linux 1.0" ]; then
-    version="kali-$arch"
-    down=1
-elif [ "$os" = "Ubuntu 12.04.3 LTS" ]; then
-    version="ubuntu12-$arch"
-elif [ "$os" = "Ubuntu 13.10" ]; then
-    version="ubuntu13-10-$arch"
-    down=1
-elif [ "$os" = "Ubuntu 13.04" ]; then
-    version="ubuntu13-04-$arch"
-    down=1
-else
-    echo "[-] Could not find a install for $os ($arch $kernel)"
-    exit
+
+if [[ "$os" =~ "Debian 8".*|"stretch/sid".* ]]; then
+
+    #Check if user agree with change to experimental
+    read -r -p "We need change your debian to experimental - sid branch (If you are not). You agree?[Y/n] " input
+
+    case $input in
+
+        [nN][oO]|[nN])
+                    echo "[!]Faraday install: Aborted"
+                    echo "[!]You need agree the update to experimental - sid"
+                    exit 1;;
+    esac
+
+    echo "deb http://ftp.debian.org/debian experimental main" >> /etc/apt/sources.list
+    echo "deb http://ftp.debian.org/debian sid main" >> /etc/apt/sources.list
+    apt-get update
+    update=1
 fi
 
-if [ "$down" -eq 1 ]; then
-    
-    if [ -e lib-$version.tgz ]; then
-        echo "[+] QT Libs already downloaded"
-    else
-        echo "[+] Download QT Libs"
-        wget "http://www.faradaysec.com/down/faraday/lib-$version.tgz" -O lib-$version.tgz
-    fi
-    
-    shav="sha_${version//-/_}"
-    echo `sha256sum lib-$version.tgz`
-    if [ -e lib-$version.tgz ]; then
-        if [ "`echo ${!shav}`" = "`sha256sum lib-$version.tgz | awk -F\" \" \{'print $1'\}`" ]; then
-            echo "[+] SHA256 ok"
-            tar -xvzf lib-$version.tgz
-            
-            cp -R lib-$version/* /usr/local/
-
-            cat deps/qtvars >> /etc/profile
-            . /etc/profile            
-            ldconfig
-        else
-            echo "[-] SHA256 file corrupt"
-            exit
-        fi
-    else
-        echo "[-] Download error"
-        exit
-    fi
-else
-    apt-get -y install python-qt3
+if [ "$update" -eq 0 ]; then
+    apt-get update
+    update=1
 fi
 
-apt-get -y install python-svn ipython python-pip python-dev couchdb libpq-dev
-pip install -r requirements.txt
+for pkg in build-essential ipython python-setuptools python-pip python-dev libpq-dev libffi-dev couchdb gir1.2-gtk-3.0 gir1.2-vte-2.91 gir1.2-vte-2.90 python-gobject zsh curl; do
+    sudo apt-get install -y $pkg
+done
+
+pip2 install -r requirements.txt
 
 echo "You can now run Faraday, enjoy!"
